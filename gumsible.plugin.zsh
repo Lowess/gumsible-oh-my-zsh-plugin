@@ -23,9 +23,6 @@ function _gumsible_init() {
     /bin/bash -c 'eval $(ssh-agent -s) > /dev/null \
     ssh-add ~/.ssh/id_rsa;
     molecule init template --url git@bitbucket.org:gumgum/ansible-role-cookiecutter.git'
-
-    # Pre-commit install
-    cd $2 && pre-commit install && cd ..
 }
 
 function _gumsible_test() {

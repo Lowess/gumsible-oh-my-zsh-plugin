@@ -20,9 +20,9 @@ function _gumsible_init() {
     -w /tmp/$(/usr/bin/basename "${PWD}") \
     -v ~/.ssh:/root/.ssh \
     lowess/drone-molecule:latest \
-    /bin/bash -c 'eval $(ssh-agent -s) > /dev/null \
+    /bin/bash -c "eval $(ssh-agent -s) > /dev/null;
     ssh-add ~/.ssh/id_rsa;
-    molecule init template --url git@bitbucket.org:gumgum/ansible-role-cookiecutter.git'
+    molecule init template --url git@bitbucket.org:gumgum/ansible-role-cookiecutter.git"
 }
 
 function _gumsible_test() {
@@ -37,14 +37,24 @@ function _gumsible_test() {
     -v ~/.squid/cache:/var/spool/squid3 \
     sameersbn/squid:3.3.8-23 1&> /dev/null
 
+    local ssh_agent=""
+
+    # If a download using galaxy requirements is required prompt the user for ssh key password
+    if [[ "$@" =~ "test|converge|dependency" ]]; then
+        ssh_agent="eval \$(ssh-agent -s) > /dev/null;
+                   ssh-add ~/.ssh/id_rsa;"
+    fi
+
     docker run --rm -it \
     -v ${ansible_role_dir}:/tmp/${ansible_role_name} \
-    -v ~/.aws:/root/.aws \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -w /tmp/${ansible_role_name} \
+    -v ~/.ssh:/root/.ssh \
+    -v ~/.aws:/root/.aws \
     -e PROXY_URL="$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${proxy_cache_container})" \
     lowess/drone-molecule:latest \
-    $@
+    /bin/bash -c "$ssh_agent
+    $(echo $@)"
 }
 
 function gumsible(){
@@ -102,9 +112,6 @@ _gumsible () {
         )
 
         _describe 'command' subcmds
-        ;;
-
-    pre-commit)
         ;;
     esac
 }

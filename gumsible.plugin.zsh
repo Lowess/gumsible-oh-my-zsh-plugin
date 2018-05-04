@@ -25,7 +25,7 @@ function _gumsible_molecule() {
     local EXEC_DIR_NAME=$(/usr/bin/basename ${EXEC_DIR})
 
     # Pass the second argument as a command line
-    ENV_PLUGINS=("-e" "PLUGIN_COMMAND=${2}")
+    ENV_PLUGINS=("-e" "PLUGIN_TASK=${2}")
 
     case "${2}" in
         init)
@@ -52,7 +52,7 @@ function _gumsible_molecule() {
     -v ~/.ssh:/root/.ssh \
     -v ~/.aws:/root/.aws \
     ${ENV_PLUGINS[@]} \
-    lowess/drone-molecule:experiment
+    lowess/drone-molecule:latest
 }
 
 function gumsible(){

@@ -31,7 +31,8 @@ function _gumsible_molecule() {
         init)
             ENV_PLUGINS+=("-e" "PLUGIN_URL=git@bitbucket.org:gumgum/ansible-role-cookiecutter.git")
             ;;
-        init)
+        login)
+            ENV_PLUGINS+=("-e" "PLUGIN_HOST=${3}")
             ;;
         test|converge)
             # Start a proxy container to cache downloads

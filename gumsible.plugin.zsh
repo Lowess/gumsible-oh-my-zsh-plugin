@@ -1,5 +1,6 @@
 
 function _gumsible_find_dirname(){
+    # Try to find the role's root repository
     local path="$1"
 
     if [[ "${path}" != '/' ]];
@@ -13,63 +14,56 @@ function _gumsible_find_dirname(){
     fi
 }
 
-function _gumsible_init() {
-    docker run --rm -it \
-    -v "${PWD}":/tmp/$(/usr/bin/basename "${PWD}") \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -w /tmp/$(/usr/bin/basename "${PWD}") \
-    -v ~/.ssh:/root/.ssh \
-    lowess/drone-molecule:latest \
-    /bin/bash -c "eval $(ssh-agent -s) > /dev/null;
-    ssh-add ~/.ssh/id_rsa;
-    molecule init template --url git@bitbucket.org:gumgum/ansible-role-cookiecutter.git"
-}
-
-function _gumsible_test() {
-
-    local proxy_cache_container="squid"
-    local ansible_role_dir=$(_gumsible_find_dirname $(pwd))
-    local ansible_role_name=$(/usr/bin/basename ${ansible_role_dir})
-
-    docker start ${proxy_cache_container} 1&> /dev/null || docker run -d \
-    --name ${proxy_cache_container} \
-    -p 3128:3128 \
-    -v ~/.squid/cache:/var/spool/squid3 \
-    sameersbn/squid:3.3.8-23 1&> /dev/null
-
-    local ssh_agent=""
-
-    # If a download using galaxy requirements is required prompt the user for ssh key password
-    if [[ "$@" =~ "test|converge|dependency" ]]; then
-        ssh_agent="eval \$(ssh-agent -s) > /dev/null;
-                   ssh-add ~/.ssh/id_rsa;"
+function _gumsible_molecule() {
+    # Grab the role's root folder if any...
+    local EXEC_DIR=$(_gumsible_find_dirname $(pwd))
+    #... otherwise default to the current PWD
+    if [[ -z "${EXEC_DIR}" ]]; then
+        EXEC_DIR="${PWD}"
     fi
 
+    local EXEC_DIR_NAME=$(/usr/bin/basename ${EXEC_DIR})
+
+    # Pass the second argument as a command line
+    ENV_PLUGINS=("-e" "PLUGIN_COMMAND=${2}")
+
+    case "${2}" in
+        init)
+            ENV_PLUGINS+=("-e" "PLUGIN_URL=git@bitbucket.org:gumgum/ansible-role-cookiecutter.git")
+            ;;
+        init)
+            ;;
+        test|converge)
+            # Start a proxy container to cache downloads
+            local proxy_cache_container="squid"
+
+            docker start ${proxy_cache_container} 1&> /dev/null || docker run -d \
+            --name ${proxy_cache_container} \
+            -p 3128:3128 \
+            -v ~/.squid/cache:/var/spool/squid3 \
+            sameersbn/squid:3.3.8-23 1&> /dev/null
+            ;;
+    esac
+
     docker run --rm -it \
-    -v ${ansible_role_dir}:/tmp/${ansible_role_name} \
+    -v ${EXEC_DIR}:/tmp/${EXEC_DIR_NAME} \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -w /tmp/${ansible_role_name} \
+    -w /tmp/${EXEC_DIR_NAME} \
     -v ~/.ssh:/root/.ssh \
     -v ~/.aws:/root/.aws \
-    -e PROXY_URL="$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${proxy_cache_container})" \
-    lowess/drone-molecule:latest \
-    /bin/bash -c "$ssh_agent
-    $(echo $@)"
+    ${ENV_PLUGINS[@]} \
+    lowess/drone-molecule:experiment
 }
 
 function gumsible(){
 
     case "$1" in
-        'init')
-            _gumsible_init $@
+        molecule)
+            _gumsible_molecule $@
             ;;
 
-        'test')
-            _gumsible_test molecule test
-            ;;
-
-        'molecule')
-            _gumsible_test $@
+        *)
+            _gumsible_molecule "molecule" $@
             ;;
     esac
 }
@@ -78,7 +72,8 @@ function gumsible(){
 _gumsible () {
     local -a _1st_arguments
 
-    _1st_arguments=('init' 'test' 'molecule')
+    _1st_arguments=('check' 'converge' 'create' 'dependency' 'destroy' 'idempotence' 'init'
+                    'lint' 'list' 'login' 'prepare' 'side' 'syntax' 'test' 'verify')
 
     _arguments \
         '*:: :->subcmds' && return 0
@@ -89,30 +84,26 @@ _gumsible () {
     fi
 
     case "$words[1]" in
-    init)
-        ;;
-
-    molecule)
-        subcmds=(
-            'check:Use the provisioner to perform a Dry-Run...'
-            'converge:Use the provisioner to configure instances...'
-            'create:Use the provisioner to start the instances.'
-            'dependency:Manage the roles dependencies.'
-            'destroy:Use the provisioner to destroy the instances.'
-            'idempotence:Use the provisioner to configure the...'
-            'init:Initialize a new role or scenario.'
-            'lint:Lint the role.'
-            'list:Lists status of instances.'
-            'login:Log in to one instance.'
-            'prepare:Use the provisioner to prepare the instances...'
-            'side-effect:Use the provisioner to perform side-effects...'
-            'syntax:Use the provisioner to syntax check the role.'
-            'test:Test (lint, destroy, dependency, syntax,...'
-            'verify:Run automated tests against instances.'
-        )
-
-        _describe 'command' subcmds
-        ;;
+        molecule)
+            subcmds=(
+                'check:Use the provisioner to perform a Dry-Run...'
+                'converge:Use the provisioner to configure instances...'
+                'create:Use the provisioner to start the instances.'
+                'dependency:Manage the roles dependencies.'
+                'destroy:Use the provisioner to destroy the instances.'
+                'idempotence:Use the provisioner to configure the...'
+                'init:Initialize a new role or scenario.'
+                'lint:Lint the role.'
+                'list:Lists status of instances.'
+                'login:Log in to one instance.'
+                'prepare:Use the provisioner to prepare the instances...'
+                'side-effect:Use the provisioner to perform side-effects...'
+                'syntax:Use the provisioner to syntax check the role.'
+                'test:Test (lint, destroy, dependency, syntax,...'
+                'verify:Run automated tests against instances.'
+            )
+            _describe 'command' subcmds
+            ;;
     esac
 }
 

@@ -28,13 +28,13 @@ function _gumsible_molecule() {
     ENV_PLUGINS=("-e" "PLUGIN_TASK=${2}")
 
     case "${2}" in
-        init)
+        "init")
             ENV_PLUGINS+=("-e" "PLUGIN_URL=git@bitbucket.org:gumgum/ansible-role-cookiecutter.git")
             ;;
-        login)
+        "login")
             ENV_PLUGINS+=("-e" "PLUGIN_HOST=${3}")
             ;;
-        test|converge)
+        "test" | "converge")
             # Start a proxy container to cache downloads
             local proxy_cache_container="squid"
 
@@ -43,6 +43,8 @@ function _gumsible_molecule() {
             -p 3128:3128 \
             -v ~/.squid/cache:/var/spool/squid3 \
             sameersbn/squid:3.3.8-23 1&> /dev/null
+
+            ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${proxy_cache_container})")
             ;;
     esac
 

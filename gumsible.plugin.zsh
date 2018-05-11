@@ -41,7 +41,7 @@ function _gumsible_molecule() {
             docker start ${proxy_cache_container} 1&> /dev/null || docker run -d \
             --name ${proxy_cache_container} \
             -p 3128:3128 \
-            -v ~/.squid/cache:/var/spool/squid3 \
+            -v ~/.squid:/var/spool/squid3 \
             sameersbn/squid:3.3.8-23 1&> /dev/null
 
             ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${proxy_cache_container})")

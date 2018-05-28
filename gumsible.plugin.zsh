@@ -14,6 +14,48 @@ function _gumsible_find_dirname(){
     fi
 }
 
+function _gumsible_sidecar_containers(){
+
+    local SIDECAR_CONTAINER=${1}
+
+    echo "Starting sidecar container ${SIDECAR_CONTAINER}"
+    case ${SIDECAR_CONTAINER} in
+        ssh-agent)
+            # Using a sidecar ssh-agent to forward SSH_AUTH_SOCK
+            local SSH_AGENT_SIDECAR="ssh-agent"
+
+            # Start the ssh-agent container. If already started, do not prompt for passphrase
+            docker start ${SSH_AGENT_SIDECAR} 1&> /dev/null || \
+            (
+                docker run -d \
+                --name ${SSH_AGENT_SIDECAR} \
+                nardeas/ssh-agent 1&> /dev/null \
+            && \
+                docker run -it --rm \
+                --volumes-from=ssh-agent \
+                -v ~/.ssh:/.ssh \
+                nardeas/ssh-agent \
+                ssh-add /root/.ssh/id_rsa
+            )
+            ;;
+
+        squid)
+            # Start a proxy container to cache downloads
+            local PROXY_CACHE_SIDECAR="squid"
+
+            docker start ${PROXY_CACHE_SIDECAR} 1&> /dev/null || docker run -d \
+            --name ${PROXY_CACHE_SIDECAR} \
+            -p 3128:3128 \
+            -v ~/.squid:/var/spool/squid3 \
+            lowess/squid:3.5.27 1&> /dev/null
+            ;;
+        *)
+            echo "Unknown sidecar container... abort"
+            exit 1
+            ;;
+    esac
+}
+
 function _gumsible_molecule() {
     # Grab the role's root folder if any...
     local EXEC_DIR=$(_gumsible_find_dirname $(pwd))
@@ -24,38 +66,41 @@ function _gumsible_molecule() {
 
     local EXEC_DIR_NAME=$(/usr/bin/basename ${EXEC_DIR})
 
+
+    # Docker options to use ssh-agent sidecar container
+    _gumsible_sidecar_containers ssh-agent
+    SSH_AGENT_SIDECAR_OPTS=("--volumes-from=ssh-agent")
+    SSH_AGENT_SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
+
     # Pass the second argument as a command line
     ENV_PLUGINS=("-e" "PLUGIN_TASK=${2}")
+    OPTIONS=""
 
     case "${2}" in
-        "init")
+        init)
             ENV_PLUGINS+=("-e" "PLUGIN_URL=git@bitbucket.org:gumgum/ansible-role-cookiecutter.git")
             ;;
-        "login")
+        login)
             ENV_PLUGINS+=("-e" "PLUGIN_HOST=${3}")
             ;;
-        "test" | "converge")
-            # Start a proxy container to cache downloads
-            local proxy_cache_container="squid"
-
-            docker start ${proxy_cache_container} 1&> /dev/null || docker run -d \
-            --name ${proxy_cache_container} \
-            -p 3128:3128 \
-            -v ~/.squid:/var/spool/squid3 \
-            sameersbn/squid:3.3.8-23 1&> /dev/null
-
-            ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${proxy_cache_container})")
+        test | converge)
+            # Docker options to use squid sidecar container
+            _gumsible_sidecar_containers squid
+            ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
+            OPTIONS="${@:3}"
             ;;
     esac
 
     docker run --rm -it \
     -v ${EXEC_DIR}:/tmp/${EXEC_DIR_NAME} \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -w /tmp/${EXEC_DIR_NAME} \
     -v ~/.ssh:/root/.ssh \
     -v ~/.aws:/root/.aws \
+    -w /tmp/${EXEC_DIR_NAME} \
+    ${SSH_AGENT_SIDECAR_OPTS[@]} \
     ${ENV_PLUGINS[@]} \
-    lowess/drone-molecule:latest
+    lowess/drone-molecule:latest \
+    ${OPTIONS[@]}
 }
 
 function gumsible(){

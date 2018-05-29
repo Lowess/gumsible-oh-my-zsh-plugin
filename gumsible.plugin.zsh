@@ -1,5 +1,5 @@
 
-function _gumsible_find_dirname(){
+function _gumsible_find_dirname() {
     # Try to find the role's root repository
     local path="$1"
 
@@ -14,11 +14,11 @@ function _gumsible_find_dirname(){
     fi
 }
 
-function _gumsible_sidecar_containers(){
+function _gumsible_sidecar_containers() {
 
     local SIDECAR_CONTAINER=${1}
 
-    echo "Starting sidecar container ${SIDECAR_CONTAINER}"
+    echo "~~> $fg[cyan]Starting sidecar container: $fg[green]${SIDECAR_CONTAINER}$reset_color"
     case ${SIDECAR_CONTAINER} in
         ssh-agent)
             # Using a sidecar ssh-agent to forward SSH_AUTH_SOCK
@@ -54,6 +54,32 @@ function _gumsible_sidecar_containers(){
             exit 1
             ;;
     esac
+}
+
+function __sync_requirements() {
+
+    # Grab the role's root folder if any...
+    local EXEC_DIR=$(_gumsible_find_dirname $(pwd))
+    #... otherwise default to the current PWD
+    if [[ -z "${EXEC_DIR}" ]]; then
+        EXEC_DIR="${PWD}"
+    fi
+
+    local EXEC_DIR_NAME=$(/usr/bin/basename ${EXEC_DIR})
+
+    echo "~~> $fg[cyan]Syncing: $fg[red]requirements-drone.yml$reset_color from $fg[green]requirements-local.yml $reset_color"
+
+    # sed --quiet 's/git@bitbucket.org:/https:\/\/bitbucket.org\//g'
+
+    sed 's/git@bitbucket.org:/https:\/\/bitbucket.org\//g' \
+        ${EXEC_DIR}/molecule/resources/requirements-local.yml > \
+        ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
+
+    git --no-pager diff ${EXEC_DIR}/molecule/resources/requirements-drone.yml \
+        ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
+
+    mv ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp \
+        ${EXEC_DIR}/molecule/resources/requirements-drone.yml
 }
 
 function _gumsible_molecule() {
@@ -108,6 +134,10 @@ function gumsible(){
     case "$1" in
         molecule)
             _gumsible_molecule $@
+            ;;
+
+        sync-requirements)
+            __sync_requirements
             ;;
 
         *)

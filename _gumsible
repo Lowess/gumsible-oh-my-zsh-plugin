@@ -4,7 +4,7 @@
 _gumsible () {
     local -a _1st_arguments
 
-    _1st_arguments=('molecule' 'check' 'converge' 'create' 'dependency' 'destroy' 'idempotence' 'init' 'lint' 'list' 'login' 'prepare' 'side-effect' 'syntax' 'test' 'verify')
+    _1st_arguments=('molecule' 'check' 'converge' 'create' 'dependency' 'destroy' 'idempotence' 'init' 'lint' 'list' 'login' 'prepare' 'side-effect' 'sync-requirements' 'syntax' 'test' 'verify')
 
     _arguments \
         '*:: :->subcmds' && return 0
@@ -29,6 +29,7 @@ _gumsible () {
                 'login:Log in to one instance.'
                 'prepare:Use the provisioner to prepare the instances...'
                 'side-effect:Use the provisioner to perform side-effects...'
+                'sync-requirements:Sync the requirements-drone.yml from requirements-local.yml.'
                 'syntax:Use the provisioner to syntax check the role.'
                 'test:Test (lint, destroy, dependency, syntax,...'
                 'verify:Run automated tests against instances.'

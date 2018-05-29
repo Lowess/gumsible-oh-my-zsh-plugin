@@ -50,7 +50,7 @@ function _gumsible_sidecar_containers() {
             lowess/squid:3.5.27 1&> /dev/null
             ;;
         *)
-            echo "Unknown sidecar container... abort"
+            echo "~~> $fg[red]Unknown sidecar container.$reset_color"
             exit 1
             ;;
     esac
@@ -67,19 +67,30 @@ function __sync_requirements() {
 
     local EXEC_DIR_NAME=$(/usr/bin/basename ${EXEC_DIR})
 
-    echo "~~> $fg[cyan]Syncing: $fg[red]requirements-drone.yml$reset_color from $fg[green]requirements-local.yml $reset_color"
 
-    # sed --quiet 's/git@bitbucket.org:/https:\/\/bitbucket.org\//g'
+    if [ -f ${EXEC_DIR}/molecule/resources/requirements-local.yml ]; then
+        echo "~~> $fg[cyan]Syncing: $fg[yellow]requirements-drone.yml$reset_color from $fg[magenta]requirements-local.yml $reset_color"
 
-    sed 's/git@bitbucket.org:/https:\/\/bitbucket.org\//g' \
-        ${EXEC_DIR}/molecule/resources/requirements-local.yml > \
-        ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
+        sed 's/git@bitbucket.org:/https:\/\/bitbucket.org\//g' \
+            ${EXEC_DIR}/molecule/resources/requirements-local.yml > \
+            ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
 
-    git --no-pager diff ${EXEC_DIR}/molecule/resources/requirements-drone.yml \
-        ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
+        git --no-pager diff ${EXEC_DIR}/molecule/resources/requirements-drone.yml \
+            ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
 
-    mv ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp \
-        ${EXEC_DIR}/molecule/resources/requirements-drone.yml
+        if [[ $? -eq "0" ]]; then
+            rm ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
+            echo "~~> $fg[yellow]requirements-drone.yml$reset_color and $fg[magenta]requirements-local.yml$reset_color were already in sync.$reset_color"
+        else
+            mv ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp \
+                ${EXEC_DIR}/molecule/resources/requirements-drone.yml
+            echo "~~> $fg[yellow]requirements-drone.yml$reset_color and $fg[magenta]requirements-local.yml$reset_color $fg[green]are now in sync.$reset_color"
+        fi
+
+    else
+        echo "~~> $fg[red]Could not find molecule/resources/requirements-local.yml. Make sure you inside a an ansible role.$reset_color"
+        exit 2
+    fi
 }
 
 function _gumsible_molecule() {

@@ -51,7 +51,7 @@ function _gumsible_sidecar_containers() {
             ;;
         *)
             echo "~~> $fg[red]Unknown sidecar container.$reset_color"
-            exit 1
+            return 1
             ;;
     esac
 }
@@ -75,7 +75,7 @@ function __sync_requirements() {
             ${EXEC_DIR}/molecule/resources/requirements-local.yml > \
             ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
 
-        git --no-pager diff ${EXEC_DIR}/molecule/resources/requirements-drone.yml \
+        diff ${EXEC_DIR}/molecule/resources/requirements-drone.yml \
             ${EXEC_DIR}/molecule/resources/requirements-drone.yml.tmp
 
         if [[ $? -eq "0" ]]; then
@@ -89,7 +89,7 @@ function __sync_requirements() {
 
     else
         echo "~~> $fg[red]Could not find molecule/resources/requirements-local.yml. Make sure you inside a an ansible role.$reset_color"
-        exit 2
+        return 2
     fi
 }
 

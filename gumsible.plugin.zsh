@@ -1,4 +1,3 @@
-
 function _gumsible_find_dirname() {
     # Try to find the role's root repository
     local path="$1"
@@ -56,6 +55,18 @@ function _gumsible_sidecar_containers() {
     esac
 }
 
+function __check_image_updates() {
+   echo "~~> $fg[cyan]Checking docker image updates for $fg[green]lowess/drone-molecule:latest $reset_color"
+
+    docker pull lowess/drone-molecule:latest | grep -q "Image is up to date"
+
+    if [[ $? -eq "0" ]]; then
+       echo "  | ~~> $fg[green]lowess/drone-molecule:latest $fg[cyan]image is already up to date $reset_color"
+    else
+       echo "  | ~~> $fg[green]lowess/drone-molecule:latest $fg[cyan]image was updated successfully $reset_color"
+    fi
+}
+
 function __sync_requirements() {
 
     # Grab the role's root folder if any...
@@ -94,6 +105,9 @@ function __sync_requirements() {
 }
 
 function _gumsible_molecule() {
+
+    __check_image_updates
+
     # Grab the role's root folder if any...
     local EXEC_DIR=$(_gumsible_find_dirname $(pwd))
     #... otherwise default to the current PWD

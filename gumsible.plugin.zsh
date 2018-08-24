@@ -55,15 +55,44 @@ function _gumsible_sidecar_containers() {
     esac
 }
 
-function __check_image_updates() {
-   echo "~~> $fg[cyan]Checking docker image updates for $fg[green]lowess/drone-molecule:latest $reset_color"
+function __gumsible_config() {
+    local GUMSIBLE_CONFIG_PATH="${HOME}/.gumsible"
 
-    docker pull lowess/drone-molecule:latest | grep -q "Image is up to date"
+    GUMSIBLE_MOLECULE_COOKIECUTTER_URL="https//github.com/retr0h/cookiecutter-molecule"
+
+    GUMSIBLE_SIDECARS_ENABLED="true"
+    GUMSIBLE_UPDATES_ENABLED="true"
+
+    GUMSIBLE_DOCKER_IMAGE_NAME="retr0h/molecule"
+    GUMSIBLE_DOCKER_IMAGE_VERSION="latest"
+
+    if [[ -r ${GUMSIBLE_CONFIG_PATH} ]]; then
+        echo "~~> $fg[cyan]Loaded ~/.gumsible settings successfully.$reset_color"
+        source ${GUMSIBLE_CONFIG_PATH}
+    else
+        echo "~~> $fg[yellow]Warning ~/.gumsible file not found, using default settings.$reset_color"
+    fi
+    # Molecule settings
+    echo "  | ~~> GUMSIBLE_MOLECULE_COOKIECUTTER_URL = ${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}"
+
+    # Gumsible settings
+    echo "  | ~~> GUMSIBLE_SIDECARS_ENABLED = ${GUMSIBLE_SIDECARS_ENABLED}"
+    echo "  | ~~> GUMSIBLE_UPDATES_ENABLED = ${GUMSIBLE_UPDATES_ENABLED}"
+
+    echo "  | ~~> GUMSIBLE_DOCKER_IMAGE_NAME = ${GUMSIBLE_DOCKER_IMAGE_NAME}"
+    echo "  | ~~> GUMSIBLE_DOCKER_IMAGE_VERSION = ${GUMSIBLE_DOCKER_IMAGE_VERSION}"
+
+}
+
+function __check_image_updates() {
+    echo "~~> $fg[cyan]Checking docker image updates for $fg[green]${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION} $reset_color"
+
+    docker pull "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" | grep -q "Image is up to date"
 
     if [[ $? -eq "0" ]]; then
-       echo "  | ~~> $fg[green]lowess/drone-molecule:latest $fg[cyan]image is already up to date $reset_color"
+       echo "  | ~~> $fg[green]${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION} $fg[cyan]image is already up to date $reset_color"
     else
-       echo "  | ~~> $fg[green]lowess/drone-molecule:latest $fg[cyan]image was updated successfully $reset_color"
+       echo "  | ~~> $fg[green]${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION} $fg[cyan]image was updated successfully $reset_color"
     fi
 }
 
@@ -106,7 +135,9 @@ function __sync_requirements() {
 
 function _gumsible_molecule() {
 
-    __check_image_updates
+    if ${GUMSIBLE_UPDATES_ENABLED}; then
+        __check_image_updates
+    fi
 
     # Grab the role's root folder if any...
     local EXEC_DIR=$(_gumsible_find_dirname $(pwd))
@@ -117,11 +148,14 @@ function _gumsible_molecule() {
 
     local EXEC_DIR_NAME=$(/usr/bin/basename ${EXEC_DIR})
 
+    local SSH_AGENT_SIDECAR_OPTS=()
 
     # Docker options to use ssh-agent sidecar container
-    _gumsible_sidecar_containers ssh-agent
-    SSH_AGENT_SIDECAR_OPTS=("--volumes-from=ssh-agent")
-    SSH_AGENT_SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
+    if "${GUMSIBLE_SIDECARS_ENABLED}"; then
+        _gumsible_sidecar_containers ssh-agent
+        SSH_AGENT_SIDECAR_OPTS=("--volumes-from=ssh-agent")
+        SSH_AGENT_SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
+    fi
 
     # Pass the second argument as a command line
     ENV_PLUGINS=("-e" "PLUGIN_TASK=${2}")
@@ -129,44 +163,66 @@ function _gumsible_molecule() {
 
     case "${2}" in
         init)
-            ENV_PLUGINS+=("-e" "PLUGIN_URL=git@bitbucket.org:gumgum/ansible-role-cookiecutter.git")
+            ENV_PLUGINS+=("-e" "PLUGIN_URL=${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}")
             ;;
         login)
             ENV_PLUGINS+=("-e" "PLUGIN_HOST=${3}")
             ;;
         test | converge)
-            # Docker options to use squid sidecar container
-            _gumsible_sidecar_containers squid
-            ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
-            OPTIONS="${@:3}"
+            if "${GUMSIBLE_SIDECARS_ENABLED}"; then
+                # Docker options to use squid sidecar container
+                _gumsible_sidecar_containers squid
+                ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
+                OPTIONS="${@:3}"
+            fi
             ;;
     esac
 
-    docker run --rm -it \
-    -v ${EXEC_DIR}:/tmp/${EXEC_DIR_NAME} \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v ~/.ssh:/root/.ssh \
-    -v ~/.aws:/root/.aws \
-    -w /tmp/${EXEC_DIR_NAME} \
-    ${SSH_AGENT_SIDECAR_OPTS[@]} \
-    ${ENV_PLUGINS[@]} \
-    lowess/drone-molecule:latest \
-    ${OPTIONS[@]}
+    if [[ "${GUMSIBLE_DOCKER_IMAGE_NAME}" == "lowess/drone-molecule" ]]; then
+        docker run --rm -it \
+        -v ${EXEC_DIR}:/tmp/${EXEC_DIR_NAME} \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v ~/.ssh:/root/.ssh \
+        -v ~/.aws:/root/.aws \
+        -w /tmp/${EXEC_DIR_NAME} \
+        ${SSH_AGENT_SIDECAR_OPTS[@]} \
+        ${ENV_PLUGINS[@]} \
+        "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
+        $(echo ${OPTIONS[@]})
+    else
+        docker run --rm -it \
+        -v ${EXEC_DIR}:/tmp/${EXEC_DIR_NAME} \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v ~/.ssh:/root/.ssh \
+        -v ~/.aws:/root/.aws \
+        -w /tmp/${EXEC_DIR_NAME} \
+        ${SSH_AGENT_SIDECAR_OPTS[@]} \
+        "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
+        $(echo ${@})
+    fi
+
 }
 
 function gumsible(){
 
+    __gumsible_config
+
     case "$1" in
+        # Classic Molecule call: gumsible molecule <cmd>
         molecule)
             _gumsible_molecule $@
             ;;
-
+        # Molecule shortcut commands:  gumsible <cmd>
+        init|login|check|converge|create|dependency|destroy|idempotence|lint|list|prepare|side-effect|syntax|test|verify)
+            _gumsible_molecule "molecule" $@
+            ;;
+        # Gumsible sync-requirements
         sync-requirements)
             __sync_requirements
             ;;
-
+        # Free form command: gumsible ansible --version
         *)
-            _gumsible_molecule "molecule" $@
+            _gumsible_molecule $@
             ;;
     esac
 }

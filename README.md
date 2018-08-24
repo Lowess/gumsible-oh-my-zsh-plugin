@@ -1,4 +1,4 @@
-# Gumsible oh-my-zsh-plugin
+# :candy: Gumsible oh-my-zsh-plugin
 
 ### Using Oh-My-Zsh
 

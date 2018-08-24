@@ -184,7 +184,7 @@ function _gumsible_molecule() {
                 # Docker options to use squid sidecar container
                 _gumsible_sidecar_containers squid
                 ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
-                OPTIONS="${@:3}"
+                OPTIONS=( "${@:3}" )
             fi
             ;;
     esac

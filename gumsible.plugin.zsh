@@ -47,8 +47,7 @@ function _gumsible_sidecar_containers() {
             docker start ${PROXY_CACHE_SIDECAR} 1&> /dev/null || docker run -d \
             --name ${PROXY_CACHE_SIDECAR} \
             -p 3128:3128 \
-            -v ~/.squid:/var/spool/squid3 \
-            lowess/squid:3.5.27 1&> /dev/null
+            lowess/squid:latest 1&> /dev/null
             ;;
         *)
             echo "~~> ${fg[red]:-}Unknown sidecar container.${reset_color:-}"
@@ -70,6 +69,9 @@ function __gumsible_config() {
     GUMSIBLE_DOCKER_IMAGE_NAME="retr0h/molecule"
     GUMSIBLE_DOCKER_IMAGE_VERSION="latest"
 
+    # Ansible settings
+    ANSIBLE_STRATEGY="linear"
+
     if [[ -r ${GUMSIBLE_CONFIG_PATH} ]]; then
         echo "~~> ${fg[cyan]:-}Loaded ~/.gumsible settings successfully.${reset_color:-}"
 
@@ -87,6 +89,8 @@ function __gumsible_config() {
     # Gumsible Docker settings
     echo "  | ~~> GUMSIBLE_DOCKER_IMAGE_NAME = ${GUMSIBLE_DOCKER_IMAGE_NAME}"
     echo "  | ~~> GUMSIBLE_DOCKER_IMAGE_VERSION = ${GUMSIBLE_DOCKER_IMAGE_VERSION}"
+    # Ansible settings
+    echo "  | ~~> ANSIBLE_STRATEGY = ${ANSIBLE_STRATEGY}"
 }
 
 function __check_image_updates() {
@@ -196,6 +200,7 @@ function _gumsible_molecule() {
         -v ~/.ssh:/root/.ssh \
         -v ~/.aws:/root/.aws \
         -w "/tmp/${EXEC_DIR_NAME}" \
+        -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
         "${SSH_AGENT_SIDECAR_OPTS[@]}" \
         "${ENV_PLUGINS[@]}" \
         "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \

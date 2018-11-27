@@ -15,6 +15,21 @@ function _gumsible_find_dirname() {
     fi
 }
 
+function _gumsible_list_commands() {
+
+    local GUMSIBLE_MOLECULE_COMMANDS
+
+    GUMSIBLE_MOLECULE_COMMANDS=$(docker run --rm -it \
+                                                  -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
+                                                  --entrypoint="molecule" \
+                                                  "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
+                                                  "--help" \
+                                        | grep -A100 'Commands' \
+                                        | tail -n +2 \
+                                        | awk '{ if ($2) print $1; }')
+    echo "${GUMSIBLE_MOLECULE_COMMANDS}"
+}
+
 function _gumsible_sidecar_containers() {
 
     local SIDECAR_CONTAINER=${1}
@@ -151,8 +166,11 @@ function _gumsible_molecule() {
     local EXEC_DIR
     local EXEC_DIR_NAME
     local SSH_AGENT_SIDECAR_OPTS=()
+    local COMMANDS=$(_gumsible_list_commands)
+    local OPTIONS=("${@}")
+    local COMMAND
 
-    if ${GUMSIBLE_UPDATES_ENABLED}; then
+    if "${GUMSIBLE_UPDATES_ENABLED}"; then
         __check_image_updates
     fi
 
@@ -172,50 +190,40 @@ function _gumsible_molecule() {
         SSH_AGENT_SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
     fi
 
-    # Pass the second argument as a command line
-    ENV_PLUGINS=("-e" "PLUGIN_TASK=${2}")
-    OPTIONS=""
+    for OPTION in "${OPTIONS[@]}"; do
+        if [[ "${COMMANDS}" =~ $OPTION ]]; then
+            COMMAND=${OPTION}
+        fi
+    done
 
-    case "${2}" in
+    # Based on the type of command invoked
+    case "${COMMAND}" in
         init)
-            ENV_PLUGINS+=("-e" "PLUGIN_URL=${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}")
-            ;;
-        login)
-            ENV_PLUGINS+=("-e" "PLUGIN_HOST=${3}")
+            # Shortcut for init to use the preconfigured Gumsible template
+            OPTIONS=("init" "template" "--url" "${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}" )
             ;;
         test | converge)
             if "${GUMSIBLE_SIDECARS_ENABLED}"; then
                 # Docker options to use squid sidecar container
                 _gumsible_sidecar_containers squid
                 ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
-                OPTIONS=( "${@:3}" )
             fi
             ;;
     esac
 
-    if [[ "${GUMSIBLE_DOCKER_IMAGE_NAME}" == "lowess/drone-molecule" ]]; then
-        docker run --rm -it \
-        -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -v ~/.ssh:/root/.ssh \
-        -v ~/.aws:/root/.aws \
-        -w "/tmp/${EXEC_DIR_NAME}" \
-        -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
-        "${SSH_AGENT_SIDECAR_OPTS[@]}" \
-        "${ENV_PLUGINS[@]}" \
-        "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
-        "${OPTIONS[@]}"
-    else
-        docker run --rm -it \
-        -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -v ~/.ssh:/root/.ssh \
-        -v ~/.aws:/root/.aws \
-        -w "/tmp/${EXEC_DIR_NAME}" \
-        "${SSH_AGENT_SIDECAR_OPTS[@]}" \
-        "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
-        "${@}"
-    fi
+    docker run --rm -it \
+               -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
+               -v /var/run/docker.sock:/var/run/docker.sock \
+               -v ~/.ssh:/root/.ssh \
+               -v ~/.aws:/root/.aws \
+               -w "/tmp/${EXEC_DIR_NAME}" \
+               -u "root" \
+               --entrypoint="molecule" \
+               -e "PWD=/tmp/${EXEC_DIR_NAME}" \
+               -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
+               "${SSH_AGENT_SIDECAR_OPTS[@]}" \
+               "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
+               "${OPTIONS[@]}"
 }
 
 function gumsible(){
@@ -223,19 +231,10 @@ function gumsible(){
     __gumsible_config
 
     case "$1" in
-        # Classic Molecule call: gumsible molecule <cmd>
-        molecule)
-            _gumsible_molecule "${@}"
-            ;;
-        # Molecule shortcut commands:  gumsible <cmd>
-        init|login|check|converge|create|dependency|destroy|idempotence|lint|list|prepare|side-effect|syntax|test|verify)
-            _gumsible_molecule "molecule" "${@}"
-            ;;
         # Gumsible sync-requirements
         sync-requirements)
             __sync_requirements
             ;;
-        # Free form command: gumsible ansible --version
         *)
             _gumsible_molecule "${@}"
             ;;

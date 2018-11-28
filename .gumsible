@@ -1,6 +1,6 @@
 #-- A Cookiecutter URL to init the new molecule role from:
 #   Examples:
-#     Public git repo: GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https//github.com/retr0h/cookiecutter-molecule'
+#     Public git repo: GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https://github.com/retr0h/cookiecutter-molecule'
 #     Private git repo: GUMSIBLE_MOLECULE_COOKIECUTTER_URL='git@bitbucket.org:gumgum/ansible-role-cookiecutter.git'
 GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https//github.com/retr0h/cookiecutter-molecule'
 
@@ -8,10 +8,13 @@ GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https//github.com/retr0h/cookiecutter-molecu
 GUMSIBLE_SIDECARS_ENABLED='true'
 
 #-- Boolean to check for newly pushed `GUMSIBLE_DOCKER_IMAGE_NAME`
-GUMSIBLE_UPDATES_ENABLED='true'
+GUMSIBLE_UPDATES_ENABLED='false'
 
 #-- Molecule Docker image to use
-GUMSIBLE_DOCKER_IMAGE_NAME='retr0h/molecule'
+GUMSIBLE_DOCKER_IMAGE_NAME='quay.io/ansible/molecule'
 
 #-- Molecule Docker version
 GUMSIBLE_DOCKER_IMAGE_VERSION='latest'
+
+#-- Ansible settings
+ANSIBLE_STRATEGY='linear'

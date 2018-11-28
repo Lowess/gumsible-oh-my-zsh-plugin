@@ -1,6 +1,29 @@
+###################################################################
+# Script Name    : gumsible.plugin.zsh
+# Description    : Wrapper to easily run Ansible Molecule on Docker
+# Args           :
+# Author         : Florian Dambrine
+# Email          : android.florian@gmail.com
+###################################################################
+
 # shellcheck disable=SC2148
 
-function _gumsible_find_dirname() {
+function __gumsible_list_commands() {
+
+    local GUMSIBLE_MOLECULE_COMMANDS
+
+    GUMSIBLE_MOLECULE_COMMANDS=$(docker run --rm -it \
+                                            -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
+                                            --entrypoint="molecule" \
+                                            "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
+                                            "--help" \
+                                        | grep -A100 'Commands' \
+                                        | tail -n +2 \
+                                        | awk '{ if ($2) print $1; }')
+    echo "${GUMSIBLE_MOLECULE_COMMANDS}"
+}
+
+function __gumsible_find_dirname() {
 
     local path="$1"
 
@@ -10,12 +33,12 @@ function _gumsible_find_dirname() {
         then
             echo "${path}"
         else
-            _gumsible_find_dirname "$(/usr/bin/dirname "${path}")"
+            __gumsible_find_dirname "$(/usr/bin/dirname "${path}")"
         fi
     fi
 }
 
-function _gumsible_sidecar_containers() {
+function __gumsible_sidecar_containers() {
 
     local SIDECAR_CONTAINER=${1}
 
@@ -93,7 +116,7 @@ function __gumsible_config() {
     echo "  | ~~> ANSIBLE_STRATEGY = ${ANSIBLE_STRATEGY}"
 }
 
-function __check_image_updates() {
+function __gumsible_check_updates() {
 
     local DOCKER_IMG_UPDATE
 
@@ -108,13 +131,13 @@ function __check_image_updates() {
     fi
 }
 
-function __sync_requirements() {
+function __gumsible_sync_requirements() {
 
     local EXEC_DIR
     local EXEC_DIR_NAME
 
     # Grab the role's root folder if any...
-    EXEC_DIR=$(_gumsible_find_dirname "$(pwd)")
+    EXEC_DIR=$(__gumsible_find_dirname "$(pwd)")
     #... otherwise default to the current PWD
     if [[ -z "${EXEC_DIR}" ]]; then
         EXEC_DIR="${PWD}"
@@ -146,18 +169,29 @@ function __sync_requirements() {
     fi
 }
 
-function _gumsible_molecule() {
+function __gumsible_molecule() {
 
+    # `ARGS`: Command line arguments
+    local ARGS=("${@}")
+    # `COMMAND`: Command currently being executed
+    local COMMAND
+    # `COMMANDS`: List of available Molecule commands
+    local COMMANDS
+    # `EXEC_DIR`: Root folder absolute path from where Molecule should be executed
     local EXEC_DIR
+    # `EXEC_DIR_NAME`: Name of root folder (Ansible role name)
     local EXEC_DIR_NAME
-    local SSH_AGENT_SIDECAR_OPTS=()
+    # `SIDECAR_OPTS`: A list of optional Docker arguments populated by Sidecar containers
+    local SIDECAR_OPTS=()
 
-    if ${GUMSIBLE_UPDATES_ENABLED}; then
-        __check_image_updates
+    if "${GUMSIBLE_UPDATES_ENABLED}"; then
+        __gumsible_check_updates
     fi
 
+    COMMANDS=$(__gumsible_list_commands)
+
     # Grab the role's root folder if any...
-    EXEC_DIR=$(_gumsible_find_dirname "$(pwd)")
+    EXEC_DIR=$(__gumsible_find_dirname "$(pwd)")
     #... otherwise default to the current PWD
     if [[ -z "${EXEC_DIR}" ]]; then
         EXEC_DIR="${PWD}"
@@ -165,57 +199,51 @@ function _gumsible_molecule() {
 
     EXEC_DIR_NAME=$(/usr/bin/basename "${EXEC_DIR}")
 
-    # Docker options to use ssh-agent sidecar container
-    if "${GUMSIBLE_SIDECARS_ENABLED}"; then
-        _gumsible_sidecar_containers ssh-agent
-        SSH_AGENT_SIDECAR_OPTS=("--volumes-from=ssh-agent")
-        SSH_AGENT_SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
-    fi
+    for OPTION in "${ARGS[@]}"; do
+        if [[ "${COMMANDS}" =~ $OPTION ]]; then
+            COMMAND=${OPTION}
+        fi
+    done
 
-    # Pass the second argument as a command line
-    ENV_PLUGINS=("-e" "PLUGIN_TASK=${2}")
-    OPTIONS=""
-
-    case "${2}" in
+    # Based on the type of command invoked
+    case "${COMMAND}" in
         init)
-            ENV_PLUGINS+=("-e" "PLUGIN_URL=${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}")
+            # Shortcut for init to use the preconfigured Gumsible template
+            ARGS=("init" "template" "--url" "${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}" )
             ;;
-        login)
-            ENV_PLUGINS+=("-e" "PLUGIN_HOST=${3}")
-            ;;
-        test | converge)
+
+        dependency | check | test | converge)
             if "${GUMSIBLE_SIDECARS_ENABLED}"; then
-                # Docker options to use squid sidecar container
-                _gumsible_sidecar_containers squid
-                ENV_PLUGINS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
-                OPTIONS=( "${@:3}" )
+                # Docker options to use ssh-agent sidecar container
+                __gumsible_sidecar_containers ssh-agent
+                SIDECAR_OPTS=("--volumes-from=ssh-agent")
+                SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
+
+                case "${COMMAND}" in
+                    test | converge)
+                        # Docker options to use squid sidecar container
+                        __gumsible_sidecar_containers squid
+                        SIDECAR_OPTS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
+                        ;;
+                esac
             fi
             ;;
     esac
 
-    if [[ "${GUMSIBLE_DOCKER_IMAGE_NAME}" == "lowess/drone-molecule" ]]; then
-        docker run --rm -it \
-        -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -v ~/.ssh:/root/.ssh \
-        -v ~/.aws:/root/.aws \
-        -w "/tmp/${EXEC_DIR_NAME}" \
-        -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
-        "${SSH_AGENT_SIDECAR_OPTS[@]}" \
-        "${ENV_PLUGINS[@]}" \
-        "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
-        "${OPTIONS[@]}"
-    else
-        docker run --rm -it \
-        -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        -v ~/.ssh:/root/.ssh \
-        -v ~/.aws:/root/.aws \
-        -w "/tmp/${EXEC_DIR_NAME}" \
-        "${SSH_AGENT_SIDECAR_OPTS[@]}" \
-        "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
-        "${@}"
-    fi
+    docker run --rm -it \
+               -v "${EXEC_DIR}:/tmp/${EXEC_DIR_NAME}" \
+               -v "/tmp/molecule:/tmp/molecule" \
+               -v /var/run/docker.sock:/var/run/docker.sock \
+               -v ~/.ssh:/root/.ssh \
+               -v ~/.aws:/root/.aws \
+               -w "/tmp/${EXEC_DIR_NAME}" \
+               -u "root" \
+               --entrypoint="molecule" \
+               -e "PWD=/tmp/${EXEC_DIR_NAME}" \
+               -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
+               "${SIDECAR_OPTS[@]}" \
+               "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
+               "${ARGS[@]}"
 }
 
 function gumsible(){
@@ -223,21 +251,13 @@ function gumsible(){
     __gumsible_config
 
     case "$1" in
-        # Classic Molecule call: gumsible molecule <cmd>
-        molecule)
-            _gumsible_molecule "${@}"
-            ;;
-        # Molecule shortcut commands:  gumsible <cmd>
-        init|login|check|converge|create|dependency|destroy|idempotence|lint|list|prepare|side-effect|syntax|test|verify)
-            _gumsible_molecule "molecule" "${@}"
-            ;;
         # Gumsible sync-requirements
         sync-requirements)
-            __sync_requirements
+            __gumsible_sync_requirements
             ;;
-        # Free form command: gumsible ansible --version
+        # Molecule commands
         *)
-            _gumsible_molecule "${@}"
+            __gumsible_molecule "${@}"
             ;;
     esac
 }

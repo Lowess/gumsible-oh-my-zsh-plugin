@@ -1,5 +1,7 @@
 # :candy: Gumsible oh-my-zsh-plugin
 
+Gumsible is a wrapper that helps you to easily run Ansible Molecule on Docker to Ansible roles
+
 ### Using Oh-My-Zsh
 
 If you are using Linux or Mac OS X, Oh-My-Zsh is a great tool to manage your ZSH configuration.
@@ -7,9 +9,10 @@ If you are using Linux or Mac OS X, Oh-My-Zsh is a great tool to manage your ZSH
 Most of the GumGum Ops team uses Oh-My-Zsh, and if you see people using shortcuts in their terminal, the magic comes from here!
 
 ### Oh-My-Zsh Gumsible plugin
+
 The Gumsible Oh-My-Zsh plugin is available on GitHub at https://github.com/Lowess/gumsible-oh-my-zsh-plugin.
 
-Currently it offers the following wrappers:
+Currently it offers the following commands:
 
 * `gumsible check`: Shortcut to run `molecule check`
 * `gumsible converge`: Shortcut to run `molecule converge`
@@ -20,8 +23,7 @@ Currently it offers the following wrappers:
 * `gumsible init`: Shortcut to `molecule init`. Used to initialize a new Ansible role from a [Cookiecutter template](https://github.com/audreyr/cookiecutter) including the [Molecule](http://molecule.readthedocs.io/en/latest/index.html) test framework.
 * `gumsible lint`: Shortcut to run `molecule lint`
 * `gumsible list`: Shortcut to run `molecule list`
-* `gumsible login <host>`: Shortcut to run `molecule login`
-* `gumsible molecule <cmd>`: Runs `molecule` commands
+* `gumsible login`: Shortcut to run `molecule login`
 * `gumsible prepare`: Shortcut to run `molecule prepare`
 * `gumsible side-effect`: Shortcut to run `molecule side-effect`
 * `gumsible syntax`: Shortcut to run `molecule syntax`
@@ -47,20 +49,23 @@ The settings file is a `shell` script sourced by the plugin.
 ```sh
 #-- A Cookiecutter URL to init the new molecule role from:
 #   Examples:
-#     Public git repo: GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https//github.com/retr0h/cookiecutter-molecule'
+#     Public git repo: GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https://github.com/retr0h/cookiecutter-molecule'
 #     Private git repo: GUMSIBLE_MOLECULE_COOKIECUTTER_URL='git@bitbucket.org:gumgum/ansible-role-cookiecutter.git'
-GUMSIBLE_MOLECULE_COOKIECUTTER_URL='https//github.com/retr0h/cookiecutter-molecule'
+GUMSIBLE_MOLECULE_COOKIECUTTER_URL='git@bitbucket.org:gumgum/ansible-role-cookiecutter.git'
 
 #-- Boolean to specify if you want to start sidecar containers (ssh-agent companion and squid proxy)
 GUMSIBLE_SIDECARS_ENABLED='true'
 
 #-- Boolean to check for newly pushed `GUMSIBLE_DOCKER_IMAGE_NAME`
-GUMSIBLE_UPDATES_ENABLED='true'
+GUMSIBLE_UPDATES_ENABLED='false'
 
 #-- Molecule Docker image to use
-GUMSIBLE_DOCKER_IMAGE_NAME='retr0h/molecule'
+GUMSIBLE_DOCKER_IMAGE_NAME='quay.io/ansible/molecule'
 
 #-- Molecule Docker version
 GUMSIBLE_DOCKER_IMAGE_VERSION='latest'
+
+#-- Ansible settings
+ANSIBLE_STRATEGY='linear'
 ```
 

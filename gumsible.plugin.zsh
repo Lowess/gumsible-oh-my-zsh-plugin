@@ -79,31 +79,21 @@ function __gumsible_sidecar_containers() {
     esac
 }
 
-function __gumsible_config() {
-
-    local GUMSIBLE_CONFIG_PATH="${HOME}/.gumsible"
-
+function __gumsible_default_config() {
     # Molecule settings
     GUMSIBLE_MOLECULE_COOKIECUTTER_URL="https//github.com/retr0h/cookiecutter-molecule"
     # Gumsible settings
     GUMSIBLE_SIDECARS_ENABLED="true"
     GUMSIBLE_UPDATES_ENABLED="true"
     # Gumsible Docker settings
-    GUMSIBLE_DOCKER_IMAGE_NAME="retr0h/molecule"
+    GUMSIBLE_DOCKER_IMAGE_NAME="quay.io/ansible/molecule"
     GUMSIBLE_DOCKER_IMAGE_VERSION="latest"
 
     # Ansible settings
     ANSIBLE_STRATEGY="linear"
+}
 
-    if [[ -r ${GUMSIBLE_CONFIG_PATH} ]]; then
-        echo "~~> ${fg[cyan]:-}Loaded ~/.gumsible settings successfully.${reset_color:-}"
-
-        # shellcheck source=/dev/null
-        source "${GUMSIBLE_CONFIG_PATH}"
-    else
-        echo "~~> ${fg[yellow]:-}Warning ~/.gumsible file not found, using default settings.${reset_color:-}"
-    fi
-
+function __gumsible_display_config() {
     # Molecule settings
     echo "  | ~~> GUMSIBLE_MOLECULE_COOKIECUTTER_URL = ${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}"
     # Gumsible settings
@@ -114,6 +104,32 @@ function __gumsible_config() {
     echo "  | ~~> GUMSIBLE_DOCKER_IMAGE_VERSION = ${GUMSIBLE_DOCKER_IMAGE_VERSION}"
     # Ansible settings
     echo "  | ~~> ANSIBLE_STRATEGY = ${ANSIBLE_STRATEGY}"
+}
+
+function __gumsible_config() {
+
+    local GUMSIBLE_CONFIG_PATH="${1:-${HOME}}/.gumsible"
+
+    if [[ -r ${GUMSIBLE_CONFIG_PATH} ]]; then
+
+        # shellcheck source=/dev/null
+        source "${GUMSIBLE_CONFIG_PATH}"
+
+        if [ -z "${1}" ]; then
+            echo "~~> ${fg[cyan]:-}Loaded ${GUMSIBLE_CONFIG_PATH} settings successfully.${reset_color:-}"
+        else
+            echo "~~> ${fg[magenta]:-}Overrode settings using ${GUMSIBLE_CONFIG_PATH}.${reset_color:-}"
+        fi
+
+        __gumsible_display_config
+    else
+        # Load default config only when trying to source ${HOME}/.gumsible
+        if [ -z "${1}" ]; then
+            echo "~~> ${fg[yellow]:-}Warning ${GUMSIBLE_CONFIG_PATH} file not found, using default settings.${reset_color:-}"
+            __gumsible_default_config
+            __gumsible_display_config
+        fi
+    fi
 }
 
 function __gumsible_check_updates() {
@@ -184,14 +200,9 @@ function __gumsible_molecule() {
     # `SIDECAR_OPTS`: A list of optional Docker arguments populated by Sidecar containers
     local SIDECAR_OPTS=()
 
-    if "${GUMSIBLE_UPDATES_ENABLED}"; then
-        __gumsible_check_updates
-    fi
-
-    COMMANDS=$(__gumsible_list_commands)
-
     # Grab the role's root folder if any...
     EXEC_DIR=$(__gumsible_find_dirname "$(pwd)")
+
     #... otherwise default to the current PWD
     if [[ -z "${EXEC_DIR}" ]]; then
         EXEC_DIR="${PWD}"
@@ -199,9 +210,19 @@ function __gumsible_molecule() {
 
     EXEC_DIR_NAME=$(/usr/bin/basename "${EXEC_DIR}")
 
-    for OPTION in "${ARGS[@]}"; do
-        if [[ "${COMMANDS}" =~ $OPTION ]]; then
-            COMMAND=${OPTION}
+    # If a the role contains it's own .gumsible file then load it
+    __gumsible_config "${EXEC_DIR}"
+
+    if "${GUMSIBLE_UPDATES_ENABLED}"; then
+        __gumsible_check_updates
+    fi
+
+    # Identify which argument is used
+    COMMANDS=$(__gumsible_list_commands)
+
+    for ARG in "${ARGS[@]}"; do
+        if [[ "${COMMANDS}" =~ $ARG ]]; then
+            COMMAND=${ARG}
         fi
     done
 

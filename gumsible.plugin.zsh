@@ -200,10 +200,6 @@ function __gumsible_molecule() {
     # `SIDECAR_OPTS`: A list of optional Docker arguments populated by Sidecar containers
     local SIDECAR_OPTS=()
 
-    if "${GUMSIBLE_UPDATES_ENABLED}"; then
-        __gumsible_check_updates
-    fi
-
     # Grab the role's root folder if any...
     EXEC_DIR=$(__gumsible_find_dirname "$(pwd)")
 
@@ -212,10 +208,14 @@ function __gumsible_molecule() {
         EXEC_DIR="${PWD}"
     fi
 
+    EXEC_DIR_NAME=$(/usr/bin/basename "${EXEC_DIR}")
+
     # If a the role contains it's own .gumsible file then load it
     __gumsible_config "${EXEC_DIR}"
 
-    EXEC_DIR_NAME=$(/usr/bin/basename "${EXEC_DIR}")
+    if "${GUMSIBLE_UPDATES_ENABLED}"; then
+        __gumsible_check_updates
+    fi
 
     # Identify which argument is used
     COMMANDS=$(__gumsible_list_commands)

@@ -228,12 +228,7 @@ function __gumsible_molecule() {
 
     # Based on the type of command invoked
     case "${COMMAND}" in
-        init)
-            # Shortcut for init to use the preconfigured Gumsible template
-            ARGS=("init" "template" "--url" "${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}" )
-            ;;
-
-        dependency | check | test | converge)
+        init | dependency | check | test | converge)
             if "${GUMSIBLE_SIDECARS_ENABLED}"; then
                 # Docker options to use ssh-agent sidecar container
                 __gumsible_sidecar_containers ssh-agent
@@ -241,6 +236,11 @@ function __gumsible_molecule() {
                 SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
 
                 case "${COMMAND}" in
+                    init)
+                        # Shortcut for init to use the preconfigured Gumsible template
+                        ARGS=("init" "template" "--url" "${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}" )
+                        ;;
+
                     test | converge)
                         # Docker options to use squid sidecar container
                         __gumsible_sidecar_containers squid

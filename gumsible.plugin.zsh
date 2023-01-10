@@ -203,6 +203,8 @@ function __gumsible_sync_requirements() {
 
 function __gumsible_molecule() {
 
+    # `ENTRYPOINT`: Docker entrypoint command
+    local ENTRYPOINT="molecule"
     # `ARGS`: Command line arguments
     local ARGS=("${@}")
     # `COMMAND`: Command currently being executed
@@ -249,32 +251,35 @@ function __gumsible_molecule() {
     if [ -f "${COLLECTION_DIR}/galaxy.yml" ]; then
         COLLECTION_NAME=$(cat "${COLLECTION_DIR}/galaxy.yml" | yq '.namespace + "." + .name')
         COLLECTION_PATH=$(echo ${COLLECTION_NAME} | tr -s '.' '/')
-        echo "~~> ${fg[cyan]:-}Found ${fg[green]:-}${COLLECTION_NAME}${reset_color:-} ${fg[cyan]:-}from collection: ${COLLECTION_DIR}"
+        echo "~~> ${fg[cyan]:-}Found ${fg[green]:-}${COLLECTION_NAME}${reset_color:-} ${fg[cyan]:-}from collection: ${COLLECTION_DIR}${reset_color:-}"
         COLLECTION_VOLUMES+=("-v" "${COLLECTION_DIR}:/root/.ansible/collections/ansible_collections/${COLLECTION_PATH}")
     fi
 
     # Based on the type of command invoked
     case "${COMMAND}" in
         init | dependency | check | test | converge)
-            if "${GUMSIBLE_SIDECARS_ENABLED}"; then
-                # Docker options to use ssh-agent sidecar container
-                __gumsible_sidecar_containers ssh-agent
-                SIDECAR_OPTS=("--volumes-from=ssh-agent")
-                SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
 
-                case "${COMMAND}" in
-                    init)
-                        # Shortcut for init to use the preconfigured Gumsible template
-                        ARGS=("init" "template" "--url" "${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}" )
-                        ;;
+            case "${COMMAND}" in
+                init)
+                    # Override the entrypoint to cookiecutter to generate role skeleton
+                    ENTRYPOINT="cookiecutter"
+                    # Shortcut for init to use the preconfigured Gumsible template
+                    ARGS=("${GUMSIBLE_MOLECULE_COOKIECUTTER_URL}" )
+                    ;;
 
-                    test | converge)
-                        # Docker options to use squid sidecar container
-                        __gumsible_sidecar_containers squid
-                        SIDECAR_OPTS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
-                        ;;
-                esac
-            fi
+                test | converge)
+
+                   if "${GUMSIBLE_SIDECARS_ENABLED}"; then
+                        # Docker options to use ssh-agent sidecar container
+                        __gumsible_sidecar_containers ssh-agent
+                        SIDECAR_OPTS=("--volumes-from=ssh-agent")
+                        SIDECAR_OPTS+=("-e" "SSH_AUTH_SOCK=/.ssh-agent/socket")
+                    fi
+                    # Docker options to use squid sidecar container
+                    __gumsible_sidecar_containers squid
+                    SIDECAR_OPTS+=("-e" "PROXY_URL=$(docker inspect -f '{{ .NetworkSettings.IPAddress }}' squid)")
+                    ;;
+            esac
             ;;
     esac
 
@@ -287,7 +292,7 @@ function __gumsible_molecule() {
                -v ~/.aws:/root/.aws \
                -w "/tmp/${EXEC_DIR_NAME}" \
                -u "root" \
-               --entrypoint="molecule" \
+               --entrypoint="${ENTRYPOINT}" \
                -e "PWD=/tmp/${EXEC_DIR_NAME}" \
                -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
                "${COLLECTION_VOLUMES[@]}" \

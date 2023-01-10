@@ -23,6 +23,21 @@ function __gumsible_list_commands() {
     echo "${GUMSIBLE_MOLECULE_COMMANDS}"
 }
 
+function __gumsible_find_collection() {
+
+    local path="$1"
+
+    if [[ "${path}" != '/' ]];
+    then
+        if [[ $(/usr/bin/basename "${path}") =~ '-collection' ]];
+        then
+            echo "${path}"
+        else
+            __gumsible_find_collection "$(/usr/bin/dirname "${path}")"
+        fi
+    fi
+}
+
 function __gumsible_find_dirname() {
 
     local path="$1"
@@ -82,6 +97,7 @@ function __gumsible_sidecar_containers() {
 function __gumsible_default_config() {
     # Molecule settings
     GUMSIBLE_MOLECULE_COOKIECUTTER_URL="https//github.com/retr0h/cookiecutter-molecule"
+
     # Gumsible settings
     GUMSIBLE_SIDECARS_ENABLED="true"
     GUMSIBLE_UPDATES_ENABLED="true"
@@ -199,6 +215,8 @@ function __gumsible_molecule() {
     local EXEC_DIR_NAME
     # `SIDECAR_OPTS`: A list of optional Docker arguments populated by Sidecar containers
     local SIDECAR_OPTS=()
+    # `COLLECTION_VOLUMES`: A list of ansible collections that should be mounted in the Molecule container
+    local COLLECTION_VOLUMES=()
 
     # Grab the role's root folder if any...
     EXEC_DIR=$(__gumsible_find_dirname "$(pwd)")
@@ -225,6 +243,15 @@ function __gumsible_molecule() {
             COMMAND=${ARG}
         fi
     done
+
+    # Check if running gumsible from within a collection
+    COLLECTION_DIR=$(__gumsible_find_collection "${EXEC_DIR}")
+    if [ -f "${COLLECTION_DIR}/galaxy.yml" ]; then
+        COLLECTION_NAME=$(cat "${COLLECTION_DIR}/galaxy.yml" | yq '.namespace + "." + .name')
+        COLLECTION_PATH=$(echo ${COLLECTION_NAME} | tr -s '.' '/')
+        echo "~~> ${fg[cyan]:-}Found ${fg[green]:-}${COLLECTION_NAME}${reset_color:-} ${fg[cyan]:-}from collection: ${COLLECTION_DIR}"
+        COLLECTION_VOLUMES+=("-v" "${COLLECTION_DIR}:/root/.ansible/collections/ansible_collections/${COLLECTION_PATH}")
+    fi
 
     # Based on the type of command invoked
     case "${COMMAND}" in
@@ -263,6 +290,7 @@ function __gumsible_molecule() {
                --entrypoint="molecule" \
                -e "PWD=/tmp/${EXEC_DIR_NAME}" \
                -e "ANSIBLE_STRATEGY=${ANSIBLE_STRATEGY}" \
+               "${COLLECTION_VOLUMES[@]}" \
                "${SIDECAR_OPTS[@]}" \
                "${GUMSIBLE_DOCKER_IMAGE_NAME}:${GUMSIBLE_DOCKER_IMAGE_VERSION}" \
                "${ARGS[@]}"

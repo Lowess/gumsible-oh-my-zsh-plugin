@@ -288,6 +288,7 @@ function __gumsible_molecule() {
                -v "/tmp/molecule:/tmp/molecule" \
                -v /var/run/docker.sock:/var/run/docker.sock \
                -v /tmp:/tmp \
+               -v ~/.cache/molecule:/root/.cache/molecule \
                -v ~/.ssh:/root/.ssh \
                -v ~/.aws:/root/.aws \
                -w "/tmp/${EXEC_DIR_NAME}" \
